@@ -1,0 +1,60 @@
+name: Deploy to Oracle Server
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  DEPLOY_HOST: 140.238.56.209
+  DEPLOY_USER: muhaoxing
+  DEPLOY_PATH: /home/muhaoxing/apps/chatgpt2api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          test -n "$DEPLOY_SSH_KEY" || { echo "Missing repository secret DEPLOY_SSH_KEY" >&2; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync release files
+        run: |
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'config.json' \
+            --exclude 'data/' \
+            --exclude '.deploy-auth-key' \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+
+      - name: Upload application secret
+        env:
+          CHATGPT2API_AUTH_KEY: ${{ secrets.CHATGPT2API_AUTH_KEY }}
+        run: |
+          test -n "$CHATGPT2API_AUTH_KEY" || { echo "Missing repository secret CHATGPT2API_AUTH_KEY" >&2; exit 1; }
+          printf '%s' "$CHATGPT2API_AUTH_KEY" | base64 | \
+            ssh "$DEPLOY_USER@$DEPLOY_HOST" "base64 -d > '$DEPLOY_PATH/.deploy-auth-key' && chmod 600 '$DEPLOY_PATH/.deploy-auth-key'"
+
+      - name: Build and deploy
+        run: |
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "chmod +x '$DEPLOY_PATH/deploy/server/deploy.sh' && '$DEPLOY_PATH/deploy/server/deploy.sh' '$DEPLOY_PATH'"
