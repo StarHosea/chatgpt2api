@@ -50,6 +50,10 @@ install_certificate() {
     sudo install -m 600 "$CERT_LIVE_DIR/privkey.pem" "$OPENRESTY_SSL_DIR/privkey.pem"
 }
 
+certificate_exists() {
+    sudo test -f "$CERT_LIVE_DIR/fullchain.pem"
+}
+
 install_renewal_hook() {
     local hook_path="/etc/letsencrypt/renewal-hooks/deploy/image-openresty.sh"
     sudo tee "$hook_path" >/dev/null <<'EOF'
@@ -79,7 +83,7 @@ fi
 docker compose -f docker-compose.production.yml up -d --build --remove-orphans
 
 # An HTTP virtual host keeps the app reachable while DNS and TLS are being set up.
-if [[ ! -f "$CERT_LIVE_DIR/fullchain.pem" ]]; then
+if ! certificate_exists; then
     sudo install -m 644 "deploy/openresty/${PRIMARY_DOMAIN}.http.conf" "$OPENRESTY_CONF_DIR/${PRIMARY_DOMAIN}.conf"
     reload_openresty
     if getent ahostsv4 "$PRIMARY_DOMAIN" >/dev/null; then
@@ -90,7 +94,7 @@ if [[ ! -f "$CERT_LIVE_DIR/fullchain.pem" ]]; then
     fi
 fi
 
-if [[ -f "$CERT_LIVE_DIR/fullchain.pem" ]]; then
+if certificate_exists; then
     install_certificate
     install_renewal_hook
     sudo install -m 644 "deploy/openresty/${PRIMARY_DOMAIN}.conf" "$OPENRESTY_CONF_DIR/${PRIMARY_DOMAIN}.conf"
@@ -99,7 +103,7 @@ fi
 
 for attempt in $(seq 1 30); do
     if curl --fail --silent --show-error "http://127.0.0.1:${APP_PORT}/" >/dev/null; then
-        if [[ -f "$CERT_LIVE_DIR/fullchain.pem" ]]; then
+        if certificate_exists; then
             echo "Deployment completed: https://${PRIMARY_DOMAIN}"
         else
             echo "Deployment completed locally; HTTPS is pending DNS setup."
