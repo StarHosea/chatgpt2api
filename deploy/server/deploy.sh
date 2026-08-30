@@ -2,8 +2,7 @@
 set -euo pipefail
 
 readonly APP_DIR="${1:-$(pwd)}"
-readonly PRIMARY_DOMAIN="image.shuangdeng.sapce"
-readonly ALTERNATE_DOMAIN="image-d.shuangdeng.sapce"
+readonly PRIMARY_DOMAIN="image-d.shuangdeng.space"
 readonly APP_PORT="${CHATGPT2API_PORT:-3010}"
 readonly OPENRESTY_CONTAINER="${OPENRESTY_CONTAINER:-1Panel-openresty-NhRG}"
 readonly OPENRESTY_CONF_DIR="/opt/1panel/www/conf.d"
@@ -57,7 +56,7 @@ install_renewal_hook() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-PRIMARY_DOMAIN="image.shuangdeng.sapce"
+PRIMARY_DOMAIN="image-d.shuangdeng.space"
 SSL_DIR="/opt/1panel/apps/openresty/openresty/conf/ssl/${PRIMARY_DOMAIN}"
 
 if [[ "${RENEWED_LINEAGE:-}" == "/etc/letsencrypt/live/${PRIMARY_DOMAIN}" ]]; then
@@ -83,11 +82,11 @@ docker compose -f docker-compose.production.yml up -d --build --remove-orphans
 if [[ ! -f "$CERT_LIVE_DIR/fullchain.pem" ]]; then
     sudo install -m 644 "deploy/openresty/${PRIMARY_DOMAIN}.http.conf" "$OPENRESTY_CONF_DIR/${PRIMARY_DOMAIN}.conf"
     reload_openresty
-    if getent ahostsv4 "$PRIMARY_DOMAIN" >/dev/null && getent ahostsv4 "$ALTERNATE_DOMAIN" >/dev/null; then
+    if getent ahostsv4 "$PRIMARY_DOMAIN" >/dev/null; then
         sudo mkdir -p "$ACME_WEBROOT"
-        sudo certbot certonly --webroot -w "$ACME_WEBROOT" --cert-name "$PRIMARY_DOMAIN" -d "$PRIMARY_DOMAIN" -d "$ALTERNATE_DOMAIN" --non-interactive --agree-tos
+        sudo certbot certonly --webroot -w "$ACME_WEBROOT" --cert-name "$PRIMARY_DOMAIN" -d "$PRIMARY_DOMAIN" --non-interactive --agree-tos
     else
-        echo "TLS pending: point both ${PRIMARY_DOMAIN} and ${ALTERNATE_DOMAIN} to this server, then rerun the workflow." >&2
+        echo "TLS pending: point ${PRIMARY_DOMAIN} to this server, then rerun the workflow." >&2
     fi
 fi
 
@@ -101,7 +100,7 @@ fi
 for attempt in $(seq 1 30); do
     if curl --fail --silent --show-error "http://127.0.0.1:${APP_PORT}/" >/dev/null; then
         if [[ -f "$CERT_LIVE_DIR/fullchain.pem" ]]; then
-            echo "Deployment completed: https://${PRIMARY_DOMAIN} and https://${ALTERNATE_DOMAIN}"
+            echo "Deployment completed: https://${PRIMARY_DOMAIN}"
         else
             echo "Deployment completed locally; HTTPS is pending DNS setup."
         fi
